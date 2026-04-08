@@ -30,44 +30,25 @@ The server is closed because the insight detection logic is the IP that makes In
 
 ## Quick start
 
-### 1. Install the SDK in your app
+### 1. Install the skill
+
+One command. Works with any MCP agent — Claude Code, Cursor, Codex, and more.
 
 ```bash
-npm install @inferevents/sdk
+npx skills add infer-events/skills
 ```
 
-```ts
-import { createClient } from "@inferevents/sdk";
+### 2. Run `/infer-setup`
 
-const infer = await createClient({
-  apiKey: "pk_write_..." // get one at infer.events/signup
-});
+The wizard handles signup, SDK install, and MCP config in your agent. Detects your framework, drops the analytics provider into the right place, and verifies events are flowing before it exits.
 
-// Auto-tracking starts immediately. Or send custom events:
-await infer.track("checkout_completed", { plan: "pro", amount: 49 });
-```
+### 3. Run `/infer-tracking-plan`
 
-### 2. Add the MCP server to your agent
+Your agent reads your codebase, identifies key user journeys, and proposes the `track()` calls. Approve or edit, and it commits them.
 
-For Claude Code, Cursor, Zed, or any MCP client — add to your config:
+That's it. Your agent now has the MCP tools — `get_top_events`, `get_retention`, `get_insights`, and others — and acts on findings without you ever opening a dashboard.
 
-```json
-{
-  "mcpServers": {
-    "infer": {
-      "command": "npx",
-      "args": ["-y", "@inferevents/mcp"],
-      "env": {
-        "INFER_API_KEY": "pk_read_..."
-      }
-    }
-  }
-}
-```
-
-Or use the hosted Streamable HTTP endpoint at `https://mcp.infer.events/mcp` (point your MCP client at it with the same `pk_read_*` key in the `Authorization` header).
-
-Your agent now has tools like `get_top_events`, `get_retention`, `get_insights`, and can act on findings without you ever opening a dashboard.
+> Prefer to wire it up by hand? You can also `npm install @inferevents/sdk` and add `@inferevents/mcp` to your agent's MCP config manually. See the per-package READMEs in [`packages/sdk`](./packages/sdk) and [`packages/mcp`](./packages/mcp) for the underlying APIs.
 
 ## Architecture
 
