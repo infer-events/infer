@@ -1,0 +1,38 @@
+{
+  "name": "@inferevents/shared",
+  "version": "0.1.3",
+  "description": "Shared types and Zod schemas for the Infer analytics packages",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/infer-events/infer.git",
+    "directory": "packages/shared"
+  },
+  "homepage": "https://github.com/infer-events/infer#readme",
+  "bugs": {
+    "url": "https://github.com/infer-events/infer/issues"
+  },
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.7"
+  },
+  "dependencies": {
+    "zod": "^3.24"
+  }
+}

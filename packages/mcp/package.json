@@ -1,0 +1,48 @@
+{
+  "name": "@inferevents/mcp",
+  "version": "0.5.2",
+  "description": "MCP server for Infer analytics — 12 tools with compounding insight threads, annotations, and project wiki",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/infer-events/infer.git",
+    "directory": "packages/mcp"
+  },
+  "homepage": "https://github.com/infer-events/infer/tree/main/packages/mcp#readme",
+  "bugs": {
+    "url": "https://github.com/infer-events/infer/issues"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "infer-mcp": "./dist/index.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "skill.md",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "tsc --noEmit",
+    "deploy:remote": "wrangler deploy --config wrangler.remote.toml"
+  },
+  "dependencies": {
+    "@inferevents/shared": "^0.1.2",
+    "@modelcontextprotocol/sdk": "^1.12",
+    "zod": "^3.24"
+  },
+  "devDependencies": {
+    "typescript": "^5.7"
+  },
+  "license": "MIT"
+}

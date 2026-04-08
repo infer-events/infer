@@ -1,0 +1,8 @@
+name = "infer-mcp-remote"
+main = "src/remote.ts"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
+
+routes = [
+  { pattern = "mcp.infer.events/*", zone_name = "infer.events" }
+]
