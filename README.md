@@ -71,21 +71,6 @@ Your agent now has tools like `get_top_events`, `get_retention`, `get_insights`,
 
 ## Architecture
 
-```
-                                                                                  
-   Your app                       api.infer.events             Your agent          
-                                  (closed source)                                  
-   ┌──────────────────┐           ┌─────────────────┐         ┌──────────────────┐
-   │ @inferevents/sdk │  events   │ Ingestion API   │         │ @inferevents/mcp │
-   │ ─────────────── ├──────────►│ ──────────────  │         │ ─────────────── ◄┤
-   │  ~3KB, no deps   │           │ Hono on CF      │         │ stdio or HTTP    │
-   │  auto-track      │           │ Workers + Neon  │         │ 12 tools         │
-   └──────────────────┘           │ + hourly cron   │ queries └────────┬─────────┘
-                                  │ for insights    │◄─────────────────┘          
-                                  └─────────────────┘                             
-                                                                                  
-```
-
 The SDK batches events client-side and POSTs them to `api.infer.events`. The MCP server (running locally as a stdio process or remotely as a Cloudflare Worker at `mcp.infer.events`) calls the same API to fetch query results, insights, and project data.
 
 You write `pk_write_*` keys into your app, `pk_read_*` keys into your agent. Both are SHA-256 hashed at rest and routed by prefix.
