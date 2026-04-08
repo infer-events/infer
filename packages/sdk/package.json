@@ -1,6 +1,6 @@
 {
   "name": "@inferevents/sdk",
-  "version": "0.1.12",
+  "version": "0.1.13",
   "description": "Event collection SDK for Infer — analytics designed for AI agents, not dashboards",
   "repository": {
     "type": "git",
