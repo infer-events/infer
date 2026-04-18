@@ -1,114 +1,54 @@
-import { describe, it, expect } from "vitest";
-import { formatProjectSummary } from "./get-project-summary.js";
+import { describe, it, expect, vi } from "vitest";
+import { handleGetProjectSummary } from "./get-project-summary.js";
 
-describe("project summary formatter", () => {
-  it("renders health bar and key metrics", () => {
-    const output = formatProjectSummary({
-      key_metrics: {
-        total_events_30d: 45230,
-        unique_users_30d: 1284,
-        daily_active_avg: 142,
-        error_rate_pct: 0.3,
-        events_trend_pct: 12,
-        users_trend_pct: 8,
-        health_score: 7,
-        active_issues: 2,
+const fakeClient = (response: unknown) =>
+  ({ getProjectSummary: vi.fn().mockResolvedValue(response) }) as const;
+
+describe("handleGetProjectSummary", () => {
+  it("renders the new LLM-obs sections when present", async () => {
+    const client = fakeClient({
+      sections: {
+        model_distribution: { "gpt-4o-mini": 0.72, "glm-5.1:cloud": 0.18, "claude-sonnet-4-6": 0.10 },
+        weekly_spend_usd: 12.47,
+        error_rate_7d: 0.023,
+        anomaly_threads: [
+          { thread_id: "trace_abc", title: "gpt-4o p95 regression", day_count: 2 },
+        ],
       },
+      compiled_at: "2026-04-18T11:00:00Z",
     });
-
-    expect(output).toContain("HEALTH: ●●●●●●●○○○ 7/10");
-    expect(output).toContain("2 active issues");
-    expect(output).toContain("45,230");
-    expect(output).toContain("+12%");
-    expect(output).toContain("1,284");
-    expect(output).toContain("+8%");
-    expect(output).toContain("~142");
-    expect(output).toContain("0.3%");
+    const parsed = JSON.parse(await handleGetProjectSummary(client as never));
+    expect(parsed.primary.rendered_text).toContain("Model distribution");
+    expect(parsed.primary.rendered_text).toContain("gpt-4o-mini");
+    expect(parsed.primary.rendered_text).toContain("$12.47");
+    expect(parsed.primary.rendered_text).toContain("2.3%");
+    expect(parsed.primary.rendered_text).toContain("gpt-4o p95 regression");
   });
 
-  it("renders singular active issue", () => {
-    const output = formatProjectSummary({
-      key_metrics: {
-        total_events_30d: 100,
-        unique_users_30d: 10,
-        daily_active_avg: 5,
-        error_rate_pct: 0,
-        events_trend_pct: 0,
-        users_trend_pct: 0,
-        health_score: 9,
-        active_issues: 1,
+  it("falls back to legacy sections when new ones aren't present", async () => {
+    const client = fakeClient({
+      sections: {
+        funnel_performance: { activation: 0.4, engagement: 0.2 },
+        event_catalog: [{ name: "signup", count: 120 }],
       },
+      compiled_at: "2026-04-18T11:00:00Z",
     });
-
-    expect(output).toContain("(1 active issue)");
-    expect(output).not.toContain("issues)");
+    const parsed = JSON.parse(await handleGetProjectSummary(client as never));
+    expect(parsed.primary.rendered_text).toContain("signup");
   });
 
-  it("groups events by category with trend arrows", () => {
-    const output = formatProjectSummary({
-      event_catalog: [
-        { event_name: "signup", category: "activation", count_30d: 500, unique_users_30d: 400, trend: "up" },
-        { event_name: "page_view", category: "engagement", count_30d: 3000, unique_users_30d: 800, trend: "stable" },
-        { event_name: "click", category: "engagement", count_30d: 1200, unique_users_30d: 600, trend: "down" },
-      ],
-    });
-
-    expect(output).toContain("EVENT CATALOG (3 events tracked)");
-    expect(output).toContain("activation: signup (500 ↑)");
-    expect(output).toContain("engagement: page_view (3,000 →), click (1,200 ↓)");
+  it("warns when no summary has been compiled yet", async () => {
+    const client = fakeClient({ sections: {}, compiled_at: null, message: "wiki-compiler has not run yet" });
+    const parsed = JSON.parse(await handleGetProjectSummary(client as never));
+    expect(parsed.warnings.some((w: string) => w.includes("compiled"))).toBe(true);
   });
 
-  it("shows funnel conversion with warning on decline", () => {
-    const output = formatProjectSummary({
-      funnel_health: [
-        { from_event: "signup", to_event: "onboarding", conversion_pct: 72, trend: "stable" },
-        { from_event: "onboarding", to_event: "purchase", conversion_pct: 18, trend: "down" },
-      ],
+  it("surfaces a caveat when still rendering legacy-only sections", async () => {
+    const client = fakeClient({
+      sections: { funnel_performance: { activation: 0.4 }, event_catalog: [{ name: "signup", count: 120 }] },
+      compiled_at: "2026-04-18T11:00:00Z",
     });
-
-    expect(output).toContain("FUNNEL HEALTH");
-    expect(output).toContain("signup → onboarding:  72% conversion");
-    expect(output).toContain("onboarding → purchase:  18% conversion ⚠️");
-    expect(output).not.toMatch(/signup.*onboarding.*⚠️/);
-  });
-
-  it("shows active threads with severity dots and annotations", () => {
-    const output = formatProjectSummary({
-      active_threads: [
-        {
-          id: "t-1",
-          title: "signup volume declining",
-          severity: "critical",
-          day_count: 3,
-          insight_count: 3,
-          latest_annotation: "Root cause: deploy abc123 broke signup API",
-        },
-        {
-          id: "t-2",
-          title: "new error in checkout",
-          severity: "notable",
-          day_count: 1,
-          insight_count: 1,
-          latest_annotation: null,
-        },
-      ],
-    });
-
-    expect(output).toContain("ACTIVE THREADS (2)");
-    expect(output).toContain("🔴 signup volume declining (3 days)");
-    expect(output).toContain("↳ Root cause: deploy abc123 broke signup API");
-    expect(output).toContain("🟡 new error in checkout");
-    // day_count=1 should not show "(1 days)"
-    expect(output).not.toContain("(1 days)");
-    // No annotation arrow for thread without annotation
-    const lines = output.split("\n");
-    const checkoutLine = lines.findIndex((l) => l.includes("new error in checkout"));
-    const nextLine = lines[checkoutLine + 1] ?? "";
-    expect(nextLine).not.toContain("↳");
-  });
-
-  it("returns empty string when no sections provided", () => {
-    const output = formatProjectSummary({});
-    expect(output).toBe("");
+    const parsed = JSON.parse(await handleGetProjectSummary(client as never));
+    expect(parsed.caveats.some((c: string) => /legacy web-analytics/i.test(c))).toBe(true);
   });
 });

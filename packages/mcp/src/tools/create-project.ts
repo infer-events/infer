@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { addProject, readConfigFile, getSession } from "../config.js";
+import { wrapResult, toolResponseText } from "../tool-result.js";
 
 export const createProjectSchema = {
   project_name: z
@@ -23,7 +24,17 @@ export async function handleCreateProject(
     session = await getSession();
   }
   if (!session) {
-    return "No session found. Sign up at https://infer.events/signup first, then run /infer-setup.";
+    return toolResponseText(
+      wrapResult({
+        primary: {
+          status: "error",
+          error: "no_session",
+          message:
+            "No session found. Sign up at https://infer.events/signup first, then run /infer-setup.",
+        },
+        source: "config",
+      }),
+    );
   }
 
   const baseUrl = config.endpoint ?? endpoint;
@@ -37,7 +48,17 @@ export async function handleCreateProject(
 
   if (!response.ok) {
     const body = await response.json().catch(() => ({})) as Record<string, unknown>;
-    return `Failed to create project: ${body.error ?? response.statusText}`;
+    return toolResponseText(
+      wrapResult({
+        primary: {
+          status: "error",
+          error: "create_failed",
+          status_code: response.status,
+          message: `Failed to create project: ${body.error ?? response.statusText}`,
+        },
+        source: "config",
+      }),
+    );
   }
 
   const result = await response.json() as {
@@ -52,7 +73,7 @@ export async function handleCreateProject(
   const slug = params.project_name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
   await addProject(slug, result.read_key, result.project_id, result.write_key, true);
 
-  const lines = [
+  const setupInstructions = [
     `Project "${result.project_name}" created and set as active.`,
     "",
     `Project ID:  ${result.project_id}`,
@@ -61,9 +82,27 @@ export async function handleCreateProject(
     "",
     `Saved to ~/.infer/config.json as "${slug}" (now active).`,
     "",
-    "Next: Install the SDK in your project with npm install @inferevents/sdk",
-    `Then init with: init({ projectId: "${result.write_key}" })`,
-  ];
+    "Next: route your LLM traffic through the Infer gateway using the write key " +
+      "(pk_write_*) as your provider's API key. The read key (pk_read_*) is for MCP access.",
+  ].join("\n");
 
-  return lines.join("\n");
+  return toolResponseText(
+    wrapResult({
+      primary: {
+        status: "created",
+        project_id: result.project_id,
+        project_name: result.project_name,
+        project_slug: slug,
+        read_key: result.read_key,
+        write_key: result.write_key,
+        endpoint: result.endpoint,
+        active: true,
+        setup_instructions_text: setupInstructions,
+      },
+      source: "config",
+      caveats: [
+        "Save the read_key (pk_read_*) for MCP access and the write_key (pk_write_*) for gateway BYOK calls. These are shown ONCE.",
+      ],
+    }),
+  );
 }

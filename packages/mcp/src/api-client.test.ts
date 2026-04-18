@@ -42,13 +42,12 @@ describe("ApiClient", () => {
   });
 
   describe("constructor", () => {
-    it("sets base URL from config", () => {
+    it("sets base URL from config", async () => {
       const client = new ApiClient(makeConfig({ endpoint: "https://custom.api.com" }));
-      mockFetch.mockResolvedValueOnce(jsonResponse({ groups: [], total: 0 }));
+      mockFetch.mockResolvedValueOnce(jsonResponse({ insights: [], count: 0 }));
 
-      client.getEventCounts({ eventName: "test", timeRange: "7d" });
+      await client.getInsights();
 
-      // We'll verify the URL in the fetch call
       expect(mockFetch).toHaveBeenCalledWith(
         expect.stringContaining("https://custom.api.com"),
         expect.any(Object),
@@ -57,9 +56,9 @@ describe("ApiClient", () => {
 
     it("sets auth headers from config apiKey", async () => {
       const client = new ApiClient(makeConfig({ apiKey: "pk_read_mykey" }));
-      mockFetch.mockResolvedValueOnce(jsonResponse({ groups: [], total: 0 }));
+      mockFetch.mockResolvedValueOnce(jsonResponse({ insights: [], count: 0 }));
 
-      await client.getEventCounts({ eventName: "test", timeRange: "7d" });
+      await client.getInsights();
 
       expect(mockFetch).toHaveBeenCalledWith(
         expect.any(String),
@@ -73,222 +72,141 @@ describe("ApiClient", () => {
     });
   });
 
-  describe("getEventCounts", () => {
-    it("calls correct URL with query params", async () => {
+  describe("listSpans", () => {
+    it("hits /v1/query/spans and never sends project_id", async () => {
       const client = new ApiClient(makeConfig());
-      mockFetch.mockResolvedValueOnce(jsonResponse({ groups: [], total: 0 }));
+      mockFetch.mockResolvedValueOnce(jsonResponse({ spans: [], next_cursor: null }));
 
-      await client.getEventCounts({ eventName: "signup", timeRange: "7d" });
+      await client.listSpans({});
 
       const url = new URL(mockFetch.mock.calls[0][0] as string);
-      expect(url.pathname).toBe("/v1/query/event-counts");
+      expect(url.pathname).toBe("/v1/query/spans");
+      expect(url.searchParams.has("project_id")).toBe(false);
     });
 
-    it("includes event_name and time_range", async () => {
+    it("forwards every filter as its query-string equivalent", async () => {
       const client = new ApiClient(makeConfig());
-      mockFetch.mockResolvedValueOnce(jsonResponse({ groups: [], total: 0 }));
+      mockFetch.mockResolvedValueOnce(jsonResponse({ spans: [], next_cursor: null }));
 
-      await client.getEventCounts({ eventName: "signup", timeRange: "30d" });
-
-      const url = new URL(mockFetch.mock.calls[0][0] as string);
-      expect(url.searchParams.get("event_name")).toBe("signup");
-      expect(url.searchParams.get("time_range")).toBe("30d");
-    });
-
-    it("includes optional group_by", async () => {
-      const client = new ApiClient(makeConfig());
-      mockFetch.mockResolvedValueOnce(jsonResponse({ groups: [], total: 0 }));
-
-      await client.getEventCounts({
-        eventName: "signup",
-        timeRange: "7d",
-        groupBy: "country",
+      await client.listSpans({
+        model: "gpt-4o-mini",
+        user_id: "u_1",
+        session_id: "s_1",
+        time_window: "24h",
+        tags: ["prod", "agent"],
+        min_duration_ms: 500,
+        status_min: 400,
+        status_max: 599,
+        cursor: "cur_abc",
+        limit: 25,
       });
 
       const url = new URL(mockFetch.mock.calls[0][0] as string);
-      expect(url.searchParams.get("group_by")).toBe("country");
-    });
-
-    it("includes optional filters as JSON", async () => {
-      const client = new ApiClient(makeConfig());
-      mockFetch.mockResolvedValueOnce(jsonResponse({ groups: [], total: 0 }));
-
-      const filters = [{ field: "plan", op: "eq" as const, value: "pro" }];
-      await client.getEventCounts({
-        eventName: "signup",
-        timeRange: "7d",
-        filters,
-      });
-
-      const url = new URL(mockFetch.mock.calls[0][0] as string);
-      expect(url.searchParams.get("filters")).toBe(JSON.stringify(filters));
-    });
-
-    it("does not include filters when array is empty", async () => {
-      const client = new ApiClient(makeConfig());
-      mockFetch.mockResolvedValueOnce(jsonResponse({ groups: [], total: 0 }));
-
-      await client.getEventCounts({
-        eventName: "signup",
-        timeRange: "7d",
-        filters: [],
-      });
-
-      const url = new URL(mockFetch.mock.calls[0][0] as string);
-      expect(url.searchParams.has("filters")).toBe(false);
-    });
-
-    it("includes project_id from params when provided", async () => {
-      const client = new ApiClient(makeConfig());
-      mockFetch.mockResolvedValueOnce(jsonResponse({ groups: [], total: 0 }));
-
-      await client.getEventCounts({
-        eventName: "signup",
-        timeRange: "7d",
-        projectId: "proj_override",
-      });
-
-      const url = new URL(mockFetch.mock.calls[0][0] as string);
-      expect(url.searchParams.get("project_id")).toBe("proj_override");
-    });
-
-    it("falls back to default project_id from config", async () => {
-      const client = new ApiClient(makeConfig({ projectId: "proj_default" }));
-      mockFetch.mockResolvedValueOnce(jsonResponse({ groups: [], total: 0 }));
-
-      await client.getEventCounts({ eventName: "signup", timeRange: "7d" });
-
-      const url = new URL(mockFetch.mock.calls[0][0] as string);
-      expect(url.searchParams.get("project_id")).toBe("proj_default");
+      expect(url.searchParams.get("model")).toBe("gpt-4o-mini");
+      expect(url.searchParams.get("user_id")).toBe("u_1");
+      expect(url.searchParams.get("session_id")).toBe("s_1");
+      expect(url.searchParams.get("time_window")).toBe("24h");
+      expect(url.searchParams.get("tags")).toBe("prod,agent");
+      expect(url.searchParams.get("min_duration_ms")).toBe("500");
+      expect(url.searchParams.get("status_min")).toBe("400");
+      expect(url.searchParams.get("status_max")).toBe("599");
+      expect(url.searchParams.get("cursor")).toBe("cur_abc");
+      expect(url.searchParams.get("limit")).toBe("25");
     });
   });
 
-  describe("getRetention", () => {
-    it("calls correct URL with all required params", async () => {
+  describe("getTrace / getSpan — URL-encoded params", () => {
+    it("encodes trace_id into the path", async () => {
       const client = new ApiClient(makeConfig());
-      mockFetch.mockResolvedValueOnce(jsonResponse({ cohorts: [] }));
+      mockFetch.mockResolvedValueOnce(jsonResponse({ trace_id: "t1", root_span_id: "s1", spans: [], span_count: 0, total_duration_ms: 0 }));
 
-      await client.getRetention({
-        startEvent: "signup",
-        returnEvent: "login",
-        timeRange: "30d",
-        granularity: "week",
-      });
+      await client.getTrace("t1/with slash");
 
       const url = new URL(mockFetch.mock.calls[0][0] as string);
-      expect(url.pathname).toBe("/v1/query/retention");
-      expect(url.searchParams.get("start_event")).toBe("signup");
-      expect(url.searchParams.get("return_event")).toBe("login");
-      expect(url.searchParams.get("time_range")).toBe("30d");
-      expect(url.searchParams.get("granularity")).toBe("week");
+      expect(url.pathname).toBe("/v1/query/trace/t1%2Fwith%20slash");
     });
 
-    it("includes project_id", async () => {
-      const client = new ApiClient(makeConfig({ projectId: "proj_ret" }));
-      mockFetch.mockResolvedValueOnce(jsonResponse({ cohorts: [] }));
+    it("encodes span_id into the path", async () => {
+      const client = new ApiClient(makeConfig());
+      mockFetch.mockResolvedValueOnce(jsonResponse({ span: {}, annotations: [] }));
 
-      await client.getRetention({
-        startEvent: "signup",
-        returnEvent: "login",
-        timeRange: "30d",
-        granularity: "week",
-      });
+      await client.getSpan("span abc");
 
       const url = new URL(mockFetch.mock.calls[0][0] as string);
-      expect(url.searchParams.get("project_id")).toBe("proj_ret");
-    });
-
-    it("uses param projectId over default", async () => {
-      const client = new ApiClient(makeConfig({ projectId: "proj_default" }));
-      mockFetch.mockResolvedValueOnce(jsonResponse({ cohorts: [] }));
-
-      await client.getRetention({
-        startEvent: "signup",
-        returnEvent: "login",
-        timeRange: "30d",
-        granularity: "week",
-        projectId: "proj_override",
-      });
-
-      const url = new URL(mockFetch.mock.calls[0][0] as string);
-      expect(url.searchParams.get("project_id")).toBe("proj_override");
+      expect(url.pathname).toBe("/v1/query/span/span%20abc");
     });
   });
 
-  describe("getUserJourney", () => {
-    it("calls correct URL with user_id", async () => {
+  describe("stats endpoints — dimension + time_window forwarding", () => {
+    it("getLatencyStats", async () => {
       const client = new ApiClient(makeConfig());
-      mockFetch.mockResolvedValueOnce(jsonResponse({ events: [] }));
-
-      await client.getUserJourney({ userId: "user_abc" });
-
+      mockFetch.mockResolvedValueOnce(jsonResponse({ dimension: "model", time_window: "24h", groups: [] }));
+      await client.getLatencyStats({ dimension: "model", time_window: "24h" });
       const url = new URL(mockFetch.mock.calls[0][0] as string);
-      expect(url.pathname).toBe("/v1/query/user-journey");
-      expect(url.searchParams.get("user_id")).toBe("user_abc");
+      expect(url.pathname).toBe("/v1/query/latency-stats");
+      expect(url.searchParams.get("dimension")).toBe("model");
+      expect(url.searchParams.get("time_window")).toBe("24h");
     });
 
-    it("includes optional time_range", async () => {
+    it("getTokenUsage", async () => {
       const client = new ApiClient(makeConfig());
-      mockFetch.mockResolvedValueOnce(jsonResponse({ events: [] }));
-
-      await client.getUserJourney({ userId: "user_abc", timeRange: "7d" });
-
+      mockFetch.mockResolvedValueOnce(jsonResponse({ dimension: "user", time_window: "7d", groups: [] }));
+      await client.getTokenUsage({ dimension: "user", time_window: "7d" });
       const url = new URL(mockFetch.mock.calls[0][0] as string);
-      expect(url.searchParams.get("time_range")).toBe("7d");
+      expect(url.pathname).toBe("/v1/query/token-usage");
+      expect(url.searchParams.get("dimension")).toBe("user");
     });
 
-    it("includes optional limit", async () => {
+    it("getCostStats", async () => {
       const client = new ApiClient(makeConfig());
-      mockFetch.mockResolvedValueOnce(jsonResponse({ events: [] }));
-
-      await client.getUserJourney({ userId: "user_abc", limit: 50 });
-
+      mockFetch.mockResolvedValueOnce(jsonResponse({ dimension: "model", time_window: "24h", rows: [], pricing_source_version: "2026-04-01" }));
+      await client.getCostStats({ dimension: "model", time_window: "24h" });
       const url = new URL(mockFetch.mock.calls[0][0] as string);
-      expect(url.searchParams.get("limit")).toBe("50");
+      expect(url.pathname).toBe("/v1/query/cost-stats");
     });
 
-    it("does not include time_range or limit when not provided", async () => {
+    it("getErrorSpans optional params", async () => {
       const client = new ApiClient(makeConfig());
-      mockFetch.mockResolvedValueOnce(jsonResponse({ events: [] }));
+      mockFetch.mockResolvedValueOnce(jsonResponse({ time_window: "24h", spans: [], error_type_counts: {}, next_cursor: null }));
+      await client.getErrorSpans({});
+      let url = new URL(mockFetch.mock.calls[0][0] as string);
+      expect(url.pathname).toBe("/v1/query/error-spans");
+      expect([...url.searchParams.keys()].length).toBe(0);
 
-      await client.getUserJourney({ userId: "user_abc" });
-
-      const url = new URL(mockFetch.mock.calls[0][0] as string);
-      expect(url.searchParams.has("time_range")).toBe(false);
-      expect(url.searchParams.has("limit")).toBe(false);
+      mockFetch.mockResolvedValueOnce(jsonResponse({ time_window: "7d", spans: [], error_type_counts: {}, next_cursor: null }));
+      await client.getErrorSpans({ time_window: "7d", limit: 100, cursor: "c1" });
+      url = new URL(mockFetch.mock.calls[1][0] as string);
+      expect(url.searchParams.get("time_window")).toBe("7d");
+      expect(url.searchParams.get("limit")).toBe("100");
+      expect(url.searchParams.get("cursor")).toBe("c1");
     });
   });
 
-  describe("getTopEvents", () => {
-    it("calls correct URL with time_range", async () => {
+  describe("annotate endpoints — POST body", () => {
+    it("annotateSpan POSTs JSON body to /v1/query/annotate-span", async () => {
       const client = new ApiClient(makeConfig());
-      mockFetch.mockResolvedValueOnce(jsonResponse({ events: [], total_event_names: 0 }));
+      mockFetch.mockResolvedValueOnce(jsonResponse({ annotation_id: "ann_1" }));
 
-      await client.getTopEvents({ timeRange: "24h" });
+      await client.annotateSpan({ span_id: "s1", content: "finding" });
 
       const url = new URL(mockFetch.mock.calls[0][0] as string);
-      expect(url.pathname).toBe("/v1/query/top-events");
-      expect(url.searchParams.get("time_range")).toBe("24h");
+      const init = mockFetch.mock.calls[0][1] as RequestInit;
+      expect(url.pathname).toBe("/v1/query/annotate-span");
+      expect(init.method).toBe("POST");
+      expect(init.body).toBe(JSON.stringify({ span_id: "s1", content: "finding" }));
     });
 
-    it("includes optional limit", async () => {
+    it("annotateTrace POSTs to /v1/query/annotate-trace", async () => {
       const client = new ApiClient(makeConfig());
-      mockFetch.mockResolvedValueOnce(jsonResponse({ events: [], total_event_names: 0 }));
+      mockFetch.mockResolvedValueOnce(jsonResponse({ annotation_id: "ann_t" }));
 
-      await client.getTopEvents({ timeRange: "7d", limit: 10 });
-
-      const url = new URL(mockFetch.mock.calls[0][0] as string);
-      expect(url.searchParams.get("limit")).toBe("10");
-    });
-
-    it("includes project_id from config default", async () => {
-      const client = new ApiClient(makeConfig({ projectId: "proj_top" }));
-      mockFetch.mockResolvedValueOnce(jsonResponse({ events: [], total_event_names: 0 }));
-
-      await client.getTopEvents({ timeRange: "7d" });
+      await client.annotateTrace({ trace_id: "t1", content: "diagnosis" });
 
       const url = new URL(mockFetch.mock.calls[0][0] as string);
-      expect(url.searchParams.get("project_id")).toBe("proj_top");
+      const init = mockFetch.mock.calls[0][1] as RequestInit;
+      expect(url.pathname).toBe("/v1/query/annotate-trace");
+      expect(init.method).toBe("POST");
+      expect(init.body).toBe(JSON.stringify({ trace_id: "t1", content: "diagnosis" }));
     });
   });
 
@@ -320,18 +238,36 @@ describe("ApiClient", () => {
       await client.getInsights();
 
       const url = new URL(mockFetch.mock.calls[0][0] as string);
-      // No query string when no params
       expect(url.searchParams.has("severity")).toBe(false);
     });
+  });
 
-    it("works with empty params object", async () => {
-      const client = new ApiClient(makeConfig());
-      mockFetch.mockResolvedValueOnce(jsonResponse({ insights: [], count: 0 }));
+  describe("§7.4 tenant-isolation: NO method sends project_id on the wire", () => {
+    it.each([
+      async (c: ApiClient) => c.listSpans({}),
+      async (c: ApiClient) => c.getTrace("t1"),
+      async (c: ApiClient) => c.getSpan("s1"),
+      async (c: ApiClient) => c.getLatencyStats({ dimension: "model", time_window: "24h" }),
+      async (c: ApiClient) => c.getTokenUsage({ dimension: "model", time_window: "7d" }),
+      async (c: ApiClient) => c.getCostStats({ dimension: "model", time_window: "7d" }),
+      async (c: ApiClient) => c.getErrorSpans({}),
+      async (c: ApiClient) => c.annotateSpan({ span_id: "s1", content: "x" }),
+      async (c: ApiClient) => c.annotateTrace({ trace_id: "t1", content: "x" }),
+      async (c: ApiClient) => c.getInsights(),
+      async (c: ApiClient) => c.getProjectSummary(),
+    ])("method %# does not include project_id in URL or body", async (callMethod) => {
+      const client = new ApiClient(makeConfig({ projectId: "proj_default" }));
+      mockFetch.mockResolvedValueOnce(jsonResponse({}));
 
-      await client.getInsights({});
+      await callMethod(client);
 
-      const url = new URL(mockFetch.mock.calls[0][0] as string);
-      expect(url.searchParams.has("severity")).toBe(false);
+      const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit | undefined];
+      const u = new URL(url);
+      expect(u.searchParams.has("project_id")).toBe(false);
+      expect(u.pathname.includes("project_id")).toBe(false);
+      if (init?.body !== undefined && typeof init.body === "string") {
+        expect(init.body).not.toContain("project_id");
+      }
     });
   });
 
@@ -341,7 +277,7 @@ describe("ApiClient", () => {
       mockFetch.mockResolvedValueOnce(textResponse("Unauthorized", 401));
 
       try {
-        await client.getEventCounts({ eventName: "test", timeRange: "7d" });
+        await client.getInsights();
         expect.unreachable("Should have thrown");
       } catch (err) {
         expect(err).toBeInstanceOf(ApiError);
@@ -354,7 +290,7 @@ describe("ApiClient", () => {
       mockFetch.mockResolvedValueOnce(textResponse("Unauthorized", 401));
 
       try {
-        await client.getEventCounts({ eventName: "test", timeRange: "7d" });
+        await client.getInsights();
         expect.unreachable("Should have thrown");
       } catch (err) {
         expect(err).toBeInstanceOf(ApiError);
@@ -366,15 +302,11 @@ describe("ApiClient", () => {
       const client = new ApiClient(makeConfig());
       mockFetch.mockResolvedValueOnce(textResponse("Forbidden", 403));
 
-      await expect(
-        client.getEventCounts({ eventName: "test", timeRange: "7d" }),
-      ).rejects.toThrow(ApiError);
+      await expect(client.getInsights()).rejects.toThrow(ApiError);
 
       mockFetch.mockResolvedValueOnce(textResponse("Forbidden", 403));
 
-      await expect(
-        client.getEventCounts({ eventName: "test", timeRange: "7d" }),
-      ).rejects.toThrow(/Access denied/);
+      await expect(client.getInsights()).rejects.toThrow(/Access denied/);
     });
 
     it("throws ApiError with status 500 and includes body detail", async () => {
@@ -384,7 +316,7 @@ describe("ApiClient", () => {
       );
 
       try {
-        await client.getEventCounts({ eventName: "test", timeRange: "7d" });
+        await client.getInsights();
         expect.unreachable("Should have thrown");
       } catch (err) {
         expect(err).toBeInstanceOf(ApiError);
@@ -398,7 +330,7 @@ describe("ApiClient", () => {
       mockFetch.mockRejectedValueOnce(new Error("ECONNREFUSED"));
 
       try {
-        await client.getEventCounts({ eventName: "test", timeRange: "7d" });
+        await client.getInsights();
         expect.unreachable("Should have thrown");
       } catch (err) {
         expect(err).toBeInstanceOf(ApiError);
@@ -417,7 +349,7 @@ describe("ApiClient", () => {
       } as Response);
 
       try {
-        await client.getEventCounts({ eventName: "test", timeRange: "invalid" });
+        await client.getInsights();
         expect.unreachable("Should have thrown");
       } catch (err) {
         expect(err).toBeInstanceOf(ApiError);
@@ -434,7 +366,7 @@ describe("ApiClient", () => {
       } as Response);
 
       try {
-        await client.getEventCounts({ eventName: "test", timeRange: "7d" });
+        await client.getInsights();
         expect.unreachable("Should have thrown");
       } catch (err) {
         expect(err).toBeInstanceOf(ApiError);
@@ -451,7 +383,7 @@ describe("ApiClient", () => {
       } as Response);
 
       try {
-        await client.getEventCounts({ eventName: "test", timeRange: "7d" });
+        await client.getInsights();
         expect.unreachable("Should have thrown");
       } catch (err) {
         expect(err).toBeInstanceOf(ApiError);
